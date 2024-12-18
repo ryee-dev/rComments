@@ -81,41 +81,60 @@ UserContext.init();
         nextCommentDiv.innerHTML = NEXT_COMMENT_TEXT;
         contentDiv.className = DOM.classed("content");
         popup.classList.add(R_COMMENTS_MAIN_CLASS);
+
         if (UserContext.get().usesNewStyles()) {
           popup.classList.add(R_COMMENTS_NEW_REDDIT_STYLE);
         }
+
         popup.style.display = "none";
         popup.appendChild(nextCommentDiv);
         popup.appendChild(contentDiv);
         window.document.body.appendChild(popup);
 
-        // Right click triggers mouseleave, so let's ignore
-        // the immediate mouseleave.
+        // Track whether the cursor is inside the popup
+        let isCursorInsidePopup = false;
+
+        // Prevent hiding when hovering over the popup
+        popup.addEventListener("mouseenter", () => {
+          isCursorInsidePopup = true;
+          if (this.hideTimeout) {
+            window.clearTimeout(this.hideTimeout);
+            delete this.hideTimeout;
+          }
+        });
+
+        // Allow hiding when cursor leaves the popup
+        popup.addEventListener("mouseleave", () => {
+          isCursorInsidePopup = false;
+          this.hidePopupSoon();
+        });
+
+        // Ignore immediate mouseleave caused by right-click
         let leftClickMouseLeave = false;
         popup.addEventListener("mousedown", (e) => {
           if (e.which === 3) {
             leftClickMouseLeave = true;
           }
         });
+
         popup.addEventListener("mouseleave", () => {
           if (leftClickMouseLeave) {
             leftClickMouseLeave = false;
             return;
           }
-          this.hidePopup();
-        });
-        popup.addEventListener("mousemove", () => {
-          if (this.hideTimeout) {
-            window.clearTimeout(this.hideTimeout);
-            delete this.hideTimeout;
+          if (!isCursorInsidePopup) {
+            this.hidePopupSoon();
           }
         });
+
         this._popup = popup;
       }
+
       this._popup.classList.toggle(
         "res-nightmode",
         UserContext.get().usesNewStyles() && UserContext.get().isNightMode()
       );
+
       return this._popup;
     },
 
@@ -158,7 +177,11 @@ UserContext.init();
     },
 
     hidePopupSoon() {
-      this.hideTimeout = window.setTimeout(() => this.hidePopup(), 300);
+      this.hideTimeout = window.setTimeout(() => {
+        if (!this.isCursorInsidePopup) {
+          this.hidePopup();
+        }
+      }, 300);
     },
 
     isFirstComment(el) {
@@ -302,49 +325,79 @@ UserContext.init();
       let active: HTMLAnchorElement | false = false;
       let yPos: number | false = false;
 
-      function isValidCommentAnchor(element: Node): boolean {
-        const isAnchor = element.nodeName === "A";
-        if (!isAnchor) {
-          return false;
+      // Updated function to validate the specific anchor
+      function isValidCommentAnchor(
+        element: HTMLElement | null
+      ): HTMLAnchorElement | null {
+        if (!element) return null;
+
+        // Direct check for anchor tag with specific attribute
+        if (
+          element.tagName === "A" &&
+          element.getAttribute("data-post-click-location") === "comments-button"
+        ) {
+          return element as HTMLAnchorElement;
         }
-        const a = element as HTMLAnchorElement;
-        const validAttributeMap = {
-          class: /((\s|^)comments(\s|$)|(\s|^)search-comments(\s|$))/,
-          "data-click-id": /(\s|^)comments(\s|$)/,
-        };
-        const keys = Object.keys(validAttributeMap);
-        for (let i = 0; i < keys.length; i++) {
-          const attributeName = keys[i];
-          const regex = validAttributeMap[attributeName];
-          const value = a.getAttribute(attributeName) || "";
-          if (value.match(regex)) {
-            return true;
+
+        return null;
+      }
+
+      // Function to traverse shadow DOM for the comment anchor
+      function findCommentAnchorInShadow(
+        root: HTMLElement | ShadowRoot
+      ): HTMLAnchorElement | null {
+        if (!root) return null;
+
+        const anchor = root.querySelector(
+          'a[data-post-click-location="comments-button"]'
+        );
+        if (anchor) return anchor as HTMLAnchorElement;
+
+        // Traverse children for nested shadow roots
+        for (const child of Array.from(root.children)) {
+          const shadowRoot = (child as HTMLElement).shadowRoot;
+          if (shadowRoot) {
+            const nestedAnchor = findCommentAnchorInShadow(shadowRoot);
+            if (nestedAnchor) return nestedAnchor;
           }
         }
-        return false;
+
+        return null;
       }
 
       window.document.body.addEventListener("mousemove", (e: MouseEvent) => {
         const target = e.target as HTMLElement;
-        const isCommentAnchor = isValidCommentAnchor(target);
-        let a = (isCommentAnchor ? target : null) as HTMLAnchorElement;
-        if (!a && target) {
-          a = isValidCommentAnchor(target.parentElement as HTMLElement)
-            ? (target.parentElement as HTMLAnchorElement)
-            : null;
+
+        let a: HTMLAnchorElement | null = null;
+
+        // Check if target or its parent is a valid anchor
+        a =
+          isValidCommentAnchor(target) ||
+          isValidCommentAnchor(target.parentElement);
+
+        // If still not found, traverse shadow DOM if applicable
+        if (!a && target.shadowRoot) {
+          a = findCommentAnchorInShadow(target.shadowRoot);
         }
+
+        if (a) {
+          // eslint-disable-next-line no-console
+          console.log(`✅ Found valid comment anchor: ${a.href}`);
+        }
+
         if (!active && !a) {
-          // Exit early if non active and not an anchor
+          // Exit early if non-active and not an anchor
           return;
         }
+
         if (active && a && a.href === active.href) {
           yPos = e.pageY;
           // Exit early if on the same anchor
           return;
         }
+
         if (!active && a) {
           this.registerPopup(); // Lazily build and register popup
-          // Hovering over anchor for the first tme
           active = a;
           yPos = e.pageY;
           this.handleAnchorMouseEnter(a);
