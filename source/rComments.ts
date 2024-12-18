@@ -36,9 +36,21 @@ UserContext.init();
     show(el: HTMLElement, commentHtml: string) {
       let popup;
       if (this.isFirstComment(el)) {
-        popup = this.popup(el);
+        popup = this.popup(el); // Get or create the popup
         popup.querySelector(`.${DOM.classed("content")}`).innerHTML =
           commentHtml;
+
+        // Add consistent re-show handling
+        popup.style.display = "block";
+
+        // Reset any lingering state
+        this.isCursorInsidePopup = false;
+
+        // Avoid stale outdated timeouts
+        if (this.hideTimeout) {
+          window.clearTimeout(this.hideTimeout);
+          delete this.hideTimeout;
+        }
       } else {
         const content = el.querySelector("._rcomments_content, .children");
         const loading = content.getElementsByClassName(
@@ -91,49 +103,25 @@ UserContext.init();
         popup.appendChild(contentDiv);
         window.document.body.appendChild(popup);
 
-        // Track whether the cursor is inside the popup
-        let isCursorInsidePopup = false;
+        // Track whether cursor is inside
+        this.isCursorInsidePopup = false;
 
-        // Prevent hiding when hovering over the popup
+        // Ensure events re-add reliably
         popup.addEventListener("mouseenter", () => {
-          isCursorInsidePopup = true;
+          this.isCursorInsidePopup = true;
           if (this.hideTimeout) {
             window.clearTimeout(this.hideTimeout);
             delete this.hideTimeout;
           }
         });
 
-        // Allow hiding when cursor leaves the popup
         popup.addEventListener("mouseleave", () => {
-          isCursorInsidePopup = false;
+          this.isCursorInsidePopup = false;
           this.hidePopupSoon();
         });
 
-        // Ignore immediate mouseleave caused by right-click
-        let leftClickMouseLeave = false;
-        popup.addEventListener("mousedown", (e) => {
-          if (e.which === 3) {
-            leftClickMouseLeave = true;
-          }
-        });
-
-        popup.addEventListener("mouseleave", () => {
-          if (leftClickMouseLeave) {
-            leftClickMouseLeave = false;
-            return;
-          }
-          if (!isCursorInsidePopup) {
-            this.hidePopupSoon();
-          }
-        });
-
-        this._popup = popup;
+        this._popup = popup; // Avoid recreating the popup
       }
-
-      this._popup.classList.toggle(
-        "res-nightmode",
-        UserContext.get().usesNewStyles() && UserContext.get().isNightMode()
-      );
 
       return this._popup;
     },
@@ -170,18 +158,37 @@ UserContext.init();
       return popup;
     },
 
+    // hidePopup() {
+    //   if (this._popup) {
+    //     this._popup.style.display = "none";
+    //   }
+    // },
+
     hidePopup() {
       if (this._popup) {
         this._popup.style.display = "none";
+
+        // Reset state variables
+        this.isCursorInsidePopup = false; // Reset cursor state
+        if (this.hideTimeout) {
+          window.clearTimeout(this.hideTimeout);
+          delete this.hideTimeout;
+        }
       }
     },
 
     hidePopupSoon() {
+      // Clear any existing hide timeout to prevent duplicate calls
+      if (this.hideTimeout) {
+        window.clearTimeout(this.hideTimeout);
+      }
+
+      // Delay hiding the popup to account for any potential mouse reentry
       this.hideTimeout = window.setTimeout(() => {
         if (!this.isCursorInsidePopup) {
           this.hidePopup();
         }
-      }, 300);
+      }, 2000); // Adjust delay as desired
     },
 
     isFirstComment(el) {
@@ -378,11 +385,6 @@ UserContext.init();
         // If still not found, traverse shadow DOM if applicable
         if (!a && target.shadowRoot) {
           a = findCommentAnchorInShadow(target.shadowRoot);
-        }
-
-        if (a) {
-          // eslint-disable-next-line no-console
-          console.log(`✅ Found valid comment anchor: ${a.href}`);
         }
 
         if (!active && !a) {
@@ -635,7 +637,7 @@ UserContext.init();
       clearTimeout(this.timeoutId);
       this.timeoutId = setTimeout(() => {
         this.renderCommentFromElement(commentAnchor, true);
-      }, 250);
+      }, 400);
     },
 
     handleAnchorMouseLeave(e, prevPageY) {
@@ -645,7 +647,7 @@ UserContext.init();
         // If leaving through the side or top, delete any ongoing request.
         // and hide the popup. The resolved request will cache the data, but
         // not open the popup.
-        delete this.request;
+        // delete this.request;
         this.view.hidePopup();
       } else {
         // Still try to hide the popup, but the timeout
