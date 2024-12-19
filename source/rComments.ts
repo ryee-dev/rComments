@@ -143,8 +143,8 @@ UserContext.init();
         const windowOffsetY = window.pageYOffset;
         const windowOffsetX = window.pageXOffset;
         const top =
-          Math.round(clientRect.top + clientRect.height + windowOffsetY) - 15;
-        const left = Math.round(clientRect.left + windowOffsetX) + 31;
+          Math.round(clientRect.top + clientRect.height + windowOffsetY) - 24;
+        const left = Math.round(clientRect.left + windowOffsetX) + 10;
         const nextComment = popup.getElementsByClassName(
           DOM.classed("next_comment")
         )[0];
@@ -187,7 +187,7 @@ UserContext.init();
         if (!this.isCursorInsidePopup) {
           this.hidePopup();
         }
-      }, 2000); // Adjust delay as desired
+      }, 800); // Adjust delay as desired
     },
 
     isFirstComment(el) {
