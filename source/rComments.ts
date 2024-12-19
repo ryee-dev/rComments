@@ -142,10 +142,9 @@ UserContext.init();
       if (this.isFirstComment(el)) {
         const windowOffsetY = window.pageYOffset;
         const windowOffsetX = window.pageXOffset;
-        const top = Math.round(
-          clientRect.top + clientRect.height + windowOffsetY
-        );
-        const left = Math.round(clientRect.left + windowOffsetX);
+        const top =
+          Math.round(clientRect.top + clientRect.height + windowOffsetY) - 15;
+        const left = Math.round(clientRect.left + windowOffsetX) + 31;
         const nextComment = popup.getElementsByClassName(
           DOM.classed("next_comment")
         )[0];
