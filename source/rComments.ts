@@ -1,10 +1,21 @@
+import { getCommentData } from "./data-fetchers/commentFetcher";
+import {
+  extractCommentData,
+  extractListingJson,
+} from "./data-fetchers/commentInspector";
 import * as DOM from "./dom/DOM";
-import { UserContext } from "./UserContext";
+import { getListingUrlPathElement } from "./dom/dom-accessors";
 import {
   applyVote,
   generateCommentHtml,
 } from "./html-generators/html_generator";
+import {
+  handleAAExtractorClick,
+  isAALinksTogglerElement,
+} from "./post-processing-plugins/aa-video-extractor/aa_video_extractor";
+import plugins from "./post-processing-plugins/plugins";
 import { _request, RequestOptions } from "./Request";
+import Store from "./Store";
 import {
   CommentResponseData,
   ExtractedCommentData,
@@ -12,18 +23,7 @@ import {
   RequestParams,
   SuccessfulCommentResponseData,
 } from "./types/types";
-import Store from "./Store";
-import { getCommentData } from "./data-fetchers/commentFetcher";
-import { getListingUrlPathElement } from "./dom/dom-accessors";
-import plugins from "./post-processing-plugins/plugins";
-import {
-  extractCommentData,
-  extractListingJson,
-} from "./data-fetchers/commentInspector";
-import {
-  handleAAExtractorClick,
-  isAALinksTogglerElement,
-} from "./post-processing-plugins/aa-video-extractor/aa_video_extractor";
+import { UserContext } from "./UserContext";
 
 UserContext.init();
 
@@ -44,7 +44,7 @@ UserContext.init();
         popup.style.display = "block";
 
         // Reset any lingering state
-        this.isCursorInsidePopup = false;
+        // this.isCursorInsidePopup = false;
 
         // Avoid stale outdated timeouts
         if (this.hideTimeout) {
@@ -104,10 +104,10 @@ UserContext.init();
         window.document.body.appendChild(popup);
 
         // Track whether cursor is inside
-        this.isCursorInsidePopup = false;
+        // this.isCursorInsidePopup = false;
 
         // Ensure events re-add reliably
-        popup.addEventListener("mouseenter", () => {
+        popup.addEventListener("mouseover", () => {
           this.isCursorInsidePopup = true;
           if (this.hideTimeout) {
             window.clearTimeout(this.hideTimeout);
@@ -115,7 +115,7 @@ UserContext.init();
           }
         });
 
-        popup.addEventListener("mouseleave", () => {
+        popup.addEventListener("mouseout", () => {
           this.isCursorInsidePopup = false;
           this.hidePopupSoon();
         });
@@ -143,8 +143,8 @@ UserContext.init();
         const windowOffsetY = window.pageYOffset;
         const windowOffsetX = window.pageXOffset;
         const top =
-          Math.round(clientRect.top + clientRect.height + windowOffsetY) - 24;
-        const left = Math.round(clientRect.left + windowOffsetX) + 10;
+          Math.round(clientRect.top + clientRect.height + windowOffsetY) - 80;
+        const left = Math.round(clientRect.left + windowOffsetX) + 20;
         const nextComment = popup.getElementsByClassName(
           DOM.classed("next_comment")
         )[0];
@@ -187,7 +187,7 @@ UserContext.init();
         if (!this.isCursorInsidePopup) {
           this.hidePopup();
         }
-      }, 800); // Adjust delay as desired
+      }, 300); // Adjust delay as desired
     },
 
     isFirstComment(el) {
@@ -374,34 +374,34 @@ UserContext.init();
       window.document.body.addEventListener("mousemove", (e: MouseEvent) => {
         const target = e.target as HTMLElement;
 
-        let a: HTMLAnchorElement | null = null;
-
-        // Check if target or its parent is a valid anchor
-        a =
+        let commentsAnchor: HTMLAnchorElement | null = null;
+        // const titleAnchor: HTMLAnchorElement | null = null;
+        // Check if target or its parent is an anchor
+        commentsAnchor =
           isValidCommentAnchor(target) ||
           isValidCommentAnchor(target.parentElement);
 
         // If still not found, traverse shadow DOM if applicable
-        if (!a && target.shadowRoot) {
-          a = findCommentAnchorInShadow(target.shadowRoot);
+        if (!commentsAnchor && target.shadowRoot) {
+          commentsAnchor = findCommentAnchorInShadow(target.shadowRoot);
         }
 
-        if (!active && !a) {
+        if (!active && !commentsAnchor) {
           // Exit early if non-active and not an anchor
           return;
         }
 
-        if (active && a && a.href === active.href) {
+        if (active && commentsAnchor && commentsAnchor.href === active.href) {
           yPos = e.pageY;
           // Exit early if on the same anchor
           return;
         }
 
-        if (!active && a) {
+        if (!active && commentsAnchor) {
           this.registerPopup(); // Lazily build and register popup
-          active = a;
+          active = commentsAnchor;
           yPos = e.pageY;
-          this.handleAnchorMouseEnter(a);
+          this.handleAnchorMouseEnter(commentsAnchor);
         } else if (active) {
           this.handleAnchorMouseLeave(e, yPos);
           active = false;

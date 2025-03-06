@@ -63,3 +63,40 @@ async function fetchNextBatch(
     params: newRequestOptions.data,
   };
 }
+
+/**
+ * This function fetches the post's content, removing all comment-related logic.
+ *
+ * @param requestOptions - Options for making the request, including the post's URL.
+ * @returns The post's content as a response.
+ */
+export async function getPostContentData(
+  requestOptions: RequestOptions<RequestParams>
+): Promise<any> {
+  const key = genKey(requestOptions.url, null); // Removed comment-specific key logic
+  let currentParams = dataCache.get(key);
+
+  // If there is no existing cached data, fetch the post content
+  if (!currentParams) {
+    currentParams = await fetchPostContent(requestOptions);
+    dataCache.set(key, currentParams);
+  }
+
+  return currentParams.responseData; // Return the post's content
+}
+
+/**
+ * Fetches the post content based on the given request options.
+ *
+ * @param requestOptions - Options including request parameters for fetching the post.
+ * @returns Cached response containing post content and parameters.
+ */
+async function fetchPostContent(
+  requestOptions: RequestOptions<RequestParams>
+): Promise<CommentFetcherCacheValue> {
+  const responseData = await _request<RequestParams, any>(requestOptions);
+  return {
+    responseData,
+    params: requestOptions.data, // Cache the request parameters
+  };
+}

@@ -2,19 +2,21 @@
   position: absolute;
   background-color: #fff;
   background-color: rgba(255, 255, 255, 0.9);
-  max-width: 600px;
+  min-width: 600px;
+  border-radius: 1rem !important;
   padding: 0;
   border: solid 1px darkgray;
   z-index: 10200000; /* z-index below RES hover*/
 }
 
 ._rcomments_comment {
-  border: solid 1px rgb(230, 230, 230);
+  /*border: solid 1px rgb(230, 230, 230);*/
   border-radius: 3px;
   font-family: verdana, arial, helvetica, sans-serif;
   margin: 0 8px 8px 10px;
   padding: 5px 5px 5px 8px;
-  background-color: rgba(0, 0, 0, 0.8);
+  /* background-color: rgba(0, 0, 0, 0.8); */
+  background-color: rgba(255, 255, 255, 0.8) !important;
 }
 
 ._rcomments_arrows {
@@ -118,6 +120,7 @@
   text-align: center;
   padding: 8px;
   font-size: 12px;
+  border-radius: 1rem 1rem 0 0 !important;
   background-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 0.2),
@@ -268,13 +271,16 @@
   list-style: disc outside;
   margin-left: 20px;
 }
+
 ._rcomments_new_reddit_styles ._rcomments_body_html ol {
   list-style: decimal outside;
   margin-left: 20px;
 }
+
 ._rcomments_new_reddit_styles ._rcomments_body_html th {
   font-weight: bold;
 }
+
 ._rcomments_new_reddit_styles ._rcomments_body_html th,
 ._rcomments_new_reddit_styles ._rcomments_body_html td {
   padding: 4px 9px;
@@ -286,6 +292,7 @@
 ._rcomments_new_reddit_styles ._rcomments_body_html code {
   background-color: #f6f7f8;
 }
+
 ._rcomments_new_reddit_styles.res-nightmode ._rcomments_body_html code {
   background-color: #272729;
   color: #5291f8;
@@ -312,6 +319,7 @@
   white-space: pre;
   word-break: normal;
 }
+
 ._rcomments_new_reddit_styles ._rcomments_body_html pre code {
   display: block;
   line-height: 20px;
@@ -325,8 +333,8 @@
 }
 
 ._rcomments_new_reddit_styles
-  ._rcomments_body_html
-  .md-spoiler-text:not(.revealed) {
+._rcomments_body_html
+.md-spoiler-text:not(.revealed) {
   background: #4f4f4f;
   cursor: pointer;
   color: transparent;
