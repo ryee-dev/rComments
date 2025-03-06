@@ -2,10 +2,12 @@
   position: absolute;
   background-color: #fff;
   background-color: rgba(255, 255, 255, 0.9);
-  min-width: 600px;
+  min-width: 400px;
+  max-width: 600px;
+  width: 100%;
   border-radius: 1rem !important;
   padding: 0;
-  border: solid 1px darkgray;
+  /* border: solid 1px darkgray; */
   z-index: 10200000; /* z-index below RES hover*/
 }
 
@@ -15,8 +17,7 @@
   font-family: verdana, arial, helvetica, sans-serif;
   margin: 0 8px 8px 10px;
   padding: 5px 5px 5px 8px;
-  /* background-color: rgba(0, 0, 0, 0.8); */
-  background-color: rgba(255, 255, 255, 0.8) !important;
+  background-color: #2a3236 !important;
 }
 
 ._rcomments_arrows {
@@ -51,12 +52,14 @@
 }
 
 ._rcomments_comment_odd > ._rcomments_comment {
-  background-color: rgb(247, 247, 248);
+  background-color: #2a3236;
+  color: #fff;
 }
 
 ._rcomments_content {
   padding-top: 5px;
   padding-bottom: 5px;
+  background-color: #0e1113;
 }
 
 ._rcomments_awards {
@@ -90,7 +93,8 @@
 }
 
 .res-nightmode ._rcomments_comment_odd > ._rcomments_comment {
-  background-color: rgb(18, 18, 18) !important;
+  background-color: #dadcce !important;
+  color: black !important;
 }
 
 .res-nightmode ._rcomments_next_comment,
@@ -333,8 +337,8 @@
 }
 
 ._rcomments_new_reddit_styles
-._rcomments_body_html
-.md-spoiler-text:not(.revealed) {
+  ._rcomments_body_html
+  .md-spoiler-text:not(.revealed) {
   background: #4f4f4f;
   cursor: pointer;
   color: transparent;

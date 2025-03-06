@@ -39,17 +39,12 @@ UserContext.init();
         popup = this.popup(el); // Get or create the popup
         popup.querySelector(`.${DOM.classed("content")}`).innerHTML =
           commentHtml;
-
-        // Add consistent re-show handling
         popup.style.display = "block";
 
-        // Reset any lingering state
-        // this.isCursorInsidePopup = false;
-
-        // Avoid stale outdated timeouts
+        // Reset state
         if (this.hideTimeout) {
           window.clearTimeout(this.hideTimeout);
-          delete this.hideTimeout;
+          this.hideTimeout = null;
         }
       } else {
         const content = el.querySelector("._rcomments_content, .children");
@@ -103,24 +98,29 @@ UserContext.init();
         popup.appendChild(contentDiv);
         window.document.body.appendChild(popup);
 
-        // Track whether cursor is inside
-        // this.isCursorInsidePopup = false;
+        // Track popup state
+        this.isPopupVisible = false;
+        this.isCursorInsidePopup = false;
 
-        // Ensure events re-add reliably
-        popup.addEventListener("mouseover", () => {
+        // Improved mouse tracking
+        popup.addEventListener("mouseenter", () => {
           this.isCursorInsidePopup = true;
           if (this.hideTimeout) {
             window.clearTimeout(this.hideTimeout);
-            delete this.hideTimeout;
+            this.hideTimeout = null;
           }
         });
 
-        popup.addEventListener("mouseout", () => {
+        popup.addEventListener("mouseleave", (e) => {
           this.isCursorInsidePopup = false;
-          this.hidePopupSoon();
+          // Only hide if we're not moving to the trigger element
+          const relatedTarget = e.relatedTarget as HTMLElement;
+          if (!relatedTarget?.closest('a[data-post-click-location="comments-button"]')) {
+            this.hidePopupSoon();
+          }
         });
 
-        this._popup = popup; // Avoid recreating the popup
+        this._popup = popup;
       }
 
       return this._popup;
@@ -144,7 +144,7 @@ UserContext.init();
         const windowOffsetX = window.pageXOffset;
         const top =
           Math.round(clientRect.top + clientRect.height + windowOffsetY) - 80;
-        const left = Math.round(clientRect.left + windowOffsetX) + 20;
+        const left = Math.round(clientRect.left + windowOffsetX);
         const nextComment = popup.getElementsByClassName(
           DOM.classed("next_comment")
         )[0];
@@ -157,37 +157,28 @@ UserContext.init();
       return popup;
     },
 
-    // hidePopup() {
-    //   if (this._popup) {
-    //     this._popup.style.display = "none";
-    //   }
-    // },
-
     hidePopup() {
-      if (this._popup) {
+      if (this._popup && !this.isCursorInsidePopup) {
         this._popup.style.display = "none";
-
-        // Reset state variables
-        this.isCursorInsidePopup = false; // Reset cursor state
+        this.isPopupVisible = false;
+        
         if (this.hideTimeout) {
           window.clearTimeout(this.hideTimeout);
-          delete this.hideTimeout;
+          this.hideTimeout = null;
         }
       }
     },
 
     hidePopupSoon() {
-      // Clear any existing hide timeout to prevent duplicate calls
       if (this.hideTimeout) {
         window.clearTimeout(this.hideTimeout);
       }
 
-      // Delay hiding the popup to account for any potential mouse reentry
       this.hideTimeout = window.setTimeout(() => {
         if (!this.isCursorInsidePopup) {
           this.hidePopup();
         }
-      }, 300); // Adjust delay as desired
+      }, 300);
     },
 
     isFirstComment(el) {
@@ -331,13 +322,12 @@ UserContext.init();
       let active: HTMLAnchorElement | false = false;
       let yPos: number | false = false;
 
-      // Updated function to validate the specific anchor
+      // Helper functions
       function isValidCommentAnchor(
         element: HTMLElement | null
       ): HTMLAnchorElement | null {
         if (!element) return null;
 
-        // Direct check for anchor tag with specific attribute
         if (
           element.tagName === "A" &&
           element.getAttribute("data-post-click-location") === "comments-button"
@@ -348,7 +338,6 @@ UserContext.init();
         return null;
       }
 
-      // Function to traverse shadow DOM for the comment anchor
       function findCommentAnchorInShadow(
         root: HTMLElement | ShadowRoot
       ): HTMLAnchorElement | null {
@@ -359,7 +348,6 @@ UserContext.init();
         );
         if (anchor) return anchor as HTMLAnchorElement;
 
-        // Traverse children for nested shadow roots
         for (const child of Array.from(root.children)) {
           const shadowRoot = (child as HTMLElement).shadowRoot;
           if (shadowRoot) {
@@ -371,65 +359,92 @@ UserContext.init();
         return null;
       }
 
-      window.document.body.addEventListener("mousemove", (e: MouseEvent) => {
-        const target = e.target as HTMLElement;
+      // Cache DOM queries
+      const bodyElement = window.document.body;
+      const controller = this;
+      
+      // Debounce mousemove handler
+      let mousemoveTimeout: number | null = null;
+      const MOUSEMOVE_DEBOUNCE = 16;
 
-        let commentsAnchor: HTMLAnchorElement | null = null;
-        // const titleAnchor: HTMLAnchorElement | null = null;
-        // Check if target or its parent is an anchor
-        commentsAnchor =
-          isValidCommentAnchor(target) ||
-          isValidCommentAnchor(target.parentElement);
-
-        // If still not found, traverse shadow DOM if applicable
-        if (!commentsAnchor && target.shadowRoot) {
-          commentsAnchor = findCommentAnchorInShadow(target.shadowRoot);
+      // Use event delegation for better performance
+      bodyElement.addEventListener("mousemove", (e: MouseEvent) => {
+        if (mousemoveTimeout) {
+          window.clearTimeout(mousemoveTimeout);
         }
 
-        if (!active && !commentsAnchor) {
-          // Exit early if non-active and not an anchor
-          return;
-        }
+        mousemoveTimeout = window.setTimeout(() => {
+          mousemoveTimeout = null;
+          
+          const target = e.target as HTMLElement;
+          let commentsAnchor: HTMLAnchorElement | null = null;
 
-        if (active && commentsAnchor && commentsAnchor.href === active.href) {
-          yPos = e.pageY;
-          // Exit early if on the same anchor
-          return;
-        }
+          // Fast path - check if we're already on an active anchor
+          if (active && target === active) {
+            yPos = e.pageY;
+            return;
+          }
 
-        if (!active && commentsAnchor) {
-          this.registerPopup(); // Lazily build and register popup
-          active = commentsAnchor;
-          yPos = e.pageY;
-          this.handleAnchorMouseEnter(commentsAnchor);
-        } else if (active) {
-          this.handleAnchorMouseLeave(e, yPos);
-          active = false;
-        }
+          // Only do expensive DOM traversal if needed
+          if (!active || target.closest('a[data-post-click-location="comments-button"]')) {
+            commentsAnchor =
+              isValidCommentAnchor(target) ||
+              isValidCommentAnchor(target.parentElement);
+
+            if (!commentsAnchor && target.shadowRoot) {
+              commentsAnchor = findCommentAnchorInShadow(target.shadowRoot);
+            }
+          }
+
+          if (!active && !commentsAnchor) {
+            return;
+          }
+
+          if (active && commentsAnchor && commentsAnchor.href === active.href) {
+            yPos = e.pageY;
+            return;
+          }
+
+          if (!active && commentsAnchor) {
+            controller.registerPopup();
+            active = commentsAnchor;
+            yPos = e.pageY;
+            controller.handleAnchorMouseEnter(commentsAnchor);
+          } else if (active) {
+            controller.handleAnchorMouseLeave(e, yPos);
+            active = false;
+          }
+        }, MOUSEMOVE_DEBOUNCE);
       });
     },
 
     registerPopup() {
-      if (this.view.hasAlreadyBuiltPopup()) {
+      if (this.view?.hasAlreadyBuiltPopup()) {
         return;
       }
       const popup = this.view.getPopup();
+      
+      // Use event delegation instead of multiple listeners
       popup.addEventListener("click", (e) => {
-        if (e.target.classList.contains("_rcomments_next_reply")) {
-          this.renderCommentFromElement(e.target.parentElement.parentElement);
-        } else if (e.target.className === "_rcomments_next_comment") {
-          this.renderCommentFromElement(e.target.parentElement);
-        } else if (e.target.classList && e.target.classList[0] === "arrow") {
+        const target = e.target as HTMLElement;
+        
+        // Early return for non-interactive elements
+        if (!target.classList?.length) {
+          return false;
+        }
+
+        if (target.classList.contains("_rcomments_next_reply")) {
+          this.renderCommentFromElement(target.parentElement.parentElement);
+        } else if (target.className === "_rcomments_next_comment") {
+          this.renderCommentFromElement(target.parentElement);
+        } else if (target.classList[0] === "arrow") {
           e.stopImmediatePropagation();
-          this.handleVote(e.target);
-        } else if (isAALinksTogglerElement(e.target)) {
+          this.handleVote(target);
+        } else if (isAALinksTogglerElement(target)) {
           handleAAExtractorClick(e);
-        } else if (
-          e.target.classList &&
-          e.target.classList.contains("md-spoiler-text")
-        ) {
+        } else if (target.classList.contains("md-spoiler-text")) {
           e.stopImmediatePropagation();
-          e.target.classList.add("revealed");
+          target.classList.add("revealed");
         }
         return false;
       });
@@ -630,27 +645,41 @@ UserContext.init();
         return;
       }
       if (!firstWordIsNumber && commentAnchorWords.length === 1) {
-        // Label on the button is "comments" (old reddit's no comments flag)
         return;
       }
-      clearTimeout(this.timeoutId);
+
+      // Clear any existing timeout
+      if (this.timeoutId) {
+        clearTimeout(this.timeoutId);
+      }
+
+      // Set active anchor for tracking
+      this.activeAnchor = commentAnchor;
+      
       this.timeoutId = setTimeout(() => {
-        this.renderCommentFromElement(commentAnchor, true);
+        if (this.activeAnchor === commentAnchor) {
+          this.renderCommentFromElement(commentAnchor, true);
+        }
       }, 400);
     },
 
     handleAnchorMouseLeave(e, prevPageY) {
-      clearTimeout(this.timeoutId);
+      if (this.timeoutId) {
+        clearTimeout(this.timeoutId);
+      }
+
+      // Only proceed with hide if we're not moving to the popup
+      const relatedTarget = e.relatedTarget as HTMLElement;
+      if (relatedTarget?.closest(`.${R_COMMENTS_MAIN_CLASS}`)) {
+        return;
+      }
 
       if (prevPageY >= e.pageY) {
-        // If leaving through the side or top, delete any ongoing request.
-        // and hide the popup. The resolved request will cache the data, but
-        // not open the popup.
-        // delete this.request;
+        // Moving up or sideways - hide immediately
         this.view.hidePopup();
+        this.activeAnchor = null;
       } else {
-        // Still try to hide the popup, but the timeout
-        // will be canceled if we hover over the popup
+        // Moving down - give chance to move to popup
         this.view.hidePopupSoon();
       }
     },
