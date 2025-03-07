@@ -11,124 +11,41 @@ UserContext.init();
   const R_POST_CONTENT_CLASS = "_rpost_content_div";
   const R_POST_CONTENT_NEW_REDDIT_STYLE = "_rpost_content_new_reddit_styles";
 
-  // Memoization cache for formatted content
-  const formattedContentCache = new Map();
-  
   const DEFAULT_REQUEST_PARAMS: RequestParams = {
     commentIndex: 0,
     depth: 0,
     limit: 1,
-    sort: "top",
-  };
-
-  /**
-   * Handles adding post content preview to share buttons
-   */
-  const handleShareButton = (button: Element) => {
-    // Skip if already processed
-    if (button.hasAttribute("data-rpost-content-processed")) {
-      return;
-    }
-    
-    // Mark as processed to avoid duplicate handlers
-    button.setAttribute("data-rpost-content-processed", "true");
-    
-    // Create transparent overlay for hover detection
-    const overlay = document.createElement("div");
-    overlay.className = "_rpost_content_overlay";
-    overlay.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: transparent;
-      z-index: 999999;
-    `;
-    
-    // Make sure parent is positioned
-    const buttonParent = button.parentElement;
-    if (buttonParent && window.getComputedStyle(buttonParent).position === 'static') {
-      buttonParent.style.position = 'relative';
-    }
-    
-    // Add hover handlers to the overlay
-    overlay.addEventListener('mouseover', (e) => {
-      e.stopPropagation();
-      e.preventDefault(); // Prevent event from bubbling to comments handler
-      
-      const postUrl = rPostContentView.getPostUrl(button as HTMLElement);
-      if (!postUrl) return;
-      
-      rPostContentView.popup(button as HTMLElement);
-      
-      // Show loading state first for better UX
-      rPostContentView.loading(button as HTMLElement);
-      
-      // Use a timeout to cancel request if it takes too long
-      const timeoutId = setTimeout(() => {
-        rPostContentView.handleError(button as HTMLElement, 'Request timed out. Try again.');
-      }, 5000);
-      
-      getPostContent({
-        url: postUrl,
-        data: DEFAULT_REQUEST_PARAMS
-      })
-        .then((postData) => {
-          clearTimeout(timeoutId);
-          rPostContentView.show(button as HTMLElement, postData);
-        })
-        .catch((error) => {
-          clearTimeout(timeoutId);
-          rPostContentView.handleError(button as HTMLElement, 'Error loading post content.');
-        });
-    });
-    
-    overlay.addEventListener('mouseout', (e: MouseEvent) => {
-      e.stopPropagation(); // Prevent event from bubbling to comments handler
-      const relatedTarget = e.relatedTarget as HTMLElement;
-      if (rPostContentView._popup && (!relatedTarget || !rPostContentView._popup.contains(relatedTarget))) {
-        rPostContentView.hidePopupSoon();
-      }
-    });
-    
-    // Prevent default share behavior and stop event propagation
-    overlay.addEventListener('click', (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-    }, true);
-    
-    // Add the overlay
-    buttonParent?.appendChild(overlay);
+    sort: "top"
   };
 
   const rPostContentView = {
     _popup: null,
     hideTimeout: null,
-    _initialized: false,
-    _observerDebounceTimeout: null,
 
-    /**
-     * Shows the post content popup with the provided data
-     */
     show(el: HTMLElement, postData: any) {
+      console.log('Showing popup with data:', postData);
       const popup = this.popup(el);
       const contentHtml = this.generatePostContentHtml(postData);
       const contentDiv = popup.querySelector(`.${DOM.classed("content")}`);
+      console.log('Content div found:', contentDiv);
+      contentDiv.innerHTML = contentHtml;
       
-      // Only update DOM if content has changed
-      if (contentDiv.innerHTML !== contentHtml) {
-        contentDiv.innerHTML = contentHtml;
-      }
-
-      // Force layout recalculation - use opacity for smoother transitions
-      popup.style.opacity = "0";
+      // Force layout recalculation
+      popup.style.opacity = '0';
       popup.style.display = "block";
-
-      // Use requestAnimationFrame for smoother transitions
-      requestAnimationFrame(() => {
-        popup.style.opacity = "1";
+      
+      // Log popup dimensions and position
+      const rect = popup.getBoundingClientRect();
+      console.log('Popup dimensions:', {
+        width: rect.width,
+        height: rect.height,
+        top: popup.style.top,
+        left: popup.style.left,
+        display: popup.style.display,
+        zIndex: popup.style.zIndex
       });
+      
+      popup.style.opacity = '1';
 
       // Reset state
       if (this.hideTimeout) {
@@ -137,23 +54,13 @@ UserContext.init();
       }
     },
 
-    /**
-     * Generates HTML for post content preview with caching
-     */
     generatePostContentHtml(postData: any): string {
-      const { title, author, subreddit, content, score } = postData;
-      
-      // Create cache key from post data
-      const cacheKey = `${title}|${author}|${subreddit}|${content}|${score}`;
-      
-      // Return cached result if available
-      if (formattedContentCache.has(cacheKey)) {
-        return formattedContentCache.get(cacheKey);
-      }
+      const { content, title, author, score, subreddit } = postData;
+      console.log('Generating HTML with:', { title, author, subreddit });
 
       // Helper function to safely escape HTML
       const escapeHtml = (unsafe: string): string => {
-        if (!unsafe) return "";
+        if (!unsafe) return '';
         return unsafe
           .replace(/&/g, "&amp;")
           .replace(/</g, "&lt;")
@@ -164,420 +71,257 @@ UserContext.init();
 
       // Format the content with proper link handling
       const formatContent = (text: string): string => {
-        if (!text) return "";
-
+        if (!text) return '';
+        
         // Escape the text first
         let formatted = escapeHtml(text);
-
-        // Use a single regex with callback for better performance
+        
+        // Convert URLs to clickable links
         formatted = formatted.replace(
           /(https?:\/\/[^\s<]+)/g,
-          (match) => `<a href="${match}" target="_blank" rel="noopener noreferrer">${match}</a>`
+          '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
         );
-
+        
         // Convert line breaks and preserve whitespace
         formatted = formatted
-          .replace(/\n/g, "<br>")
-          .replace(/\s{2,}/g, (match) => "&nbsp;".repeat(match.length));
+          .replace(/\n/g, '<br>')
+          .replace(/\s{2,}/g, match => '&nbsp;'.repeat(match.length));
 
         // Special handling for video content
-        if (formatted.startsWith("[Video]")) {
-          const videoUrl = formatted.replace("[Video] ", "");
+        if (formatted.startsWith('[Video]')) {
+          const videoUrl = formatted.replace('[Video] ', '');
           return `<div class="_rpost_content_video">
             <a href="${videoUrl}" target="_blank" rel="noopener noreferrer">View Video</a>
           </div>`;
         }
-
+        
         return formatted;
       };
 
-      const result = `
+      return `
         <div class="_rpost_content_header">
           <h3 class="_rpost_content_title">${escapeHtml(title)}</h3>
           <div class="_rpost_content_meta">
-            Posted by u/${escapeHtml(author)} in ${escapeHtml(subreddit)} • ${
-        score || "0"
-      } points
+            Posted by u/${escapeHtml(author)} in ${escapeHtml(subreddit)} • ${score || '0'} points
           </div>
         </div>
         <div class="_rpost_content_body">
           ${formatContent(content)}
         </div>
       `;
-      
-      // Cache the result (limit cache size to prevent memory issues)
-      if (formattedContentCache.size > 100) {
-        // Remove oldest entry when cache gets too large
-        const firstKey = formattedContentCache.keys().next().value;
-        formattedContentCache.delete(firstKey);
-      }
-      formattedContentCache.set(cacheKey, result);
-      
-      return result;
     },
 
-    /**
-     * Checks if popup has already been built
-     */
     hasAlreadyBuiltPopup() {
       return !!this._popup;
     },
 
-    /**
-     * Gets or creates the popup element
-     */
     getPopup() {
       if (!this._popup) {
+        console.log('Creating new popup element');
         const popup = window.document.createElement("div");
-        const headerDiv = window.document.createElement("div");
-        const titleDiv = window.document.createElement("div");
         const contentDiv = window.document.createElement("div");
-        const closeButton = window.document.createElement("button");
-        
-        // Set up header with title
-        headerDiv.className = DOM.classed("header");
-        titleDiv.className = DOM.classed("title");
-        titleDiv.textContent = "Post Content Preview";
-        headerDiv.appendChild(titleDiv);
-        
-        // Set up close button
-        closeButton.className = DOM.classed("close-button");
-        closeButton.textContent = "×";
-        closeButton.setAttribute("aria-label", "Close post content preview");
-        closeButton.style.position = "absolute";
-        closeButton.style.right = "10px";
-        closeButton.style.top = "10px";
-        closeButton.style.background = "none";
-        closeButton.style.border = "none";
-        closeButton.style.fontSize = "20px";
-        closeButton.style.cursor = "pointer";
-        closeButton.style.color = "#666";
-        
-        // Use event delegation for better performance
-        popup.addEventListener("click", (e) => {
-          const target = e.target as HTMLElement;
-          if (target === closeButton || target.closest(`.${DOM.classed("close-button")}`)) {
-            this.hidePopup();
-          }
-        });
-        
-        // Set up content area
         contentDiv.className = DOM.classed("content");
-        
-        // Add elements to popup
-        headerDiv.appendChild(closeButton);
-        popup.appendChild(headerDiv);
-        popup.appendChild(contentDiv);
-        
-        // Add classes to popup
         popup.classList.add(R_POST_CONTENT_CLASS);
 
         if (UserContext.get().usesNewStyles()) {
           popup.classList.add(R_POST_CONTENT_NEW_REDDIT_STYLE);
         }
 
+        // Ensure popup is visible with base styles
+        popup.style.zIndex = "10200000";
+        popup.style.position = "fixed";
+        popup.style.backgroundColor = "rgba(255, 255, 255, 0.98)";
+        popup.style.transition = "opacity 0.2s ease-in-out";
+        popup.style.width = "600px";  // Set a default width
+        popup.style.maxHeight = "400px";
+        popup.style.overflowY = "auto";
+        popup.style.border = "1px solid rgba(0, 0, 0, 0.1)";
+        popup.style.borderRadius = "4px";
+        popup.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.15)";
+        popup.style.padding = "16px";
+
         popup.style.display = "none";
-        
+        popup.appendChild(contentDiv);
         window.document.body.appendChild(popup);
         this._popup = popup;
-
-        // Add mouse enter/leave handlers
-        popup.addEventListener("mouseenter", () => {
-          // Clear hide timeout if mouse enters popup
-          if (this.hideTimeout) {
-            window.clearTimeout(this.hideTimeout);
-            this.hideTimeout = null;
-          }
-        });
-
-        popup.addEventListener("mouseleave", () => {
-          this.hidePopupSoon();
-        });
+        
+        console.log('Popup element created:', popup);
       }
       return this._popup;
     },
 
-    /**
-     * Creates and positions the popup
-     */
     popup(el: HTMLElement) {
       const popup = this.getPopup();
-      const { left, top, width } = el.getBoundingClientRect();
-      popup.style.position = "absolute";
-      popup.style.left = `${left + width}px`;
+      const rect = el.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      
+      // Calculate position relative to viewport
+      let top = rect.bottom;
+      let left = rect.left;
+      
+      // Ensure popup stays within viewport
+      const popupWidth = 600; // Match the width we set in getPopup
+      const popupHeight = Math.min(400, viewportHeight * 0.8); // Max height of 400px or 80% of viewport
+      
+      // Adjust horizontal position if it would go off-screen
+      if (left + popupWidth > viewportWidth) {
+        left = Math.max(0, viewportWidth - popupWidth - 20); // 20px padding from right edge
+      }
+      
+      // Adjust vertical position if it would go off-screen
+      if (top + popupHeight > viewportHeight) {
+        // Position above the element if there's more space there
+        if (rect.top > viewportHeight - rect.bottom) {
+          top = Math.max(0, rect.top - popupHeight);
+        } else {
+          // Otherwise, position at bottom of viewport with padding
+          top = viewportHeight - popupHeight - 20;
+        }
+      }
+      
+      console.log('Positioning popup at:', { 
+        top,
+        left,
+        elementRect: rect,
+        viewportHeight,
+        viewportWidth
+      });
+      
       popup.style.top = `${top}px`;
+      popup.style.left = `${left}px`;
+
       return popup;
     },
 
-    /**
-     * Hides the popup immediately
-     */
     hidePopup() {
       if (this._popup) {
+        console.log('Hiding popup');
         this._popup.style.display = "none";
-        const contentDiv = this._popup.querySelector(`.${DOM.classed("content")}`);
-        if (contentDiv) {
-          contentDiv.innerHTML = "";
-        }
-      }
-      if (this.hideTimeout) {
-        window.clearTimeout(this.hideTimeout);
-        this.hideTimeout = null;
       }
     },
 
-    /**
-     * Sets a timeout to hide the popup soon
-     */
     hidePopupSoon() {
-      if (this.hideTimeout) {
-        window.clearTimeout(this.hideTimeout);
-      }
+      if (this.hideTimeout) return;
+      console.log('Scheduling popup hide');
       this.hideTimeout = window.setTimeout(() => {
         this.hidePopup();
-      }, 300);
-    },
-
-    /**
-     * Shows loading indicator
-     */
-    loading(el: HTMLElement) {
-      const popup = this.popup(el);
-      popup.querySelector(`.${DOM.classed("content")}`).innerHTML =
-        this.loadingHtml();
-      popup.style.display = "block";
-
-      if (this.hideTimeout) {
-        window.clearTimeout(this.hideTimeout);
         this.hideTimeout = null;
-      }
+      }, 500);
     },
 
-    /**
-     * Handles showing error in popup
-     */
+    loading(el: HTMLElement) {
+      console.log('Showing loading state');
+      this.show(el, {
+        content: '<div class="_rpost_content_loading">Loading...</div>',
+        title: "Loading...",
+        author: "",
+        score: "",
+        subreddit: "",
+      });
+    },
+
     handleError(el: HTMLElement, error: string) {
-      const popup = this.popup(el);
-      popup.querySelector(`.${DOM.classed("content")}`).innerHTML = `
-        <div class="${DOM.classed("error")}">
-          ${error}
-        </div>
-      `;
-      popup.style.display = "block";
+      console.error('Error loading post content:', error);
+      this.show(el, {
+        content: `<div class="_rpost_content_error">${error}</div>`,
+        title: "Error",
+        author: "",
+        score: "",
+        subreddit: "",
+      });
     },
 
-    /**
-     * Gets the post URL from an element
-     */
     getPostUrl(element: HTMLElement): string | null {
-      // Try different strategies to get the post URL
+      // Try to find the post URL in various ways
+      const postContainer = element.closest('shreddit-post');
+      if (!postContainer) return null;
 
-      // 1. Check if element is a share button or has a post URL data attribute
-      const postUrl = element.getAttribute("data-post-url") || 
-                      element.getAttribute("data-url") || 
-                      element.getAttribute("href");
-      
-      if (postUrl) {
-        return this.normalizeUrl(postUrl);
+      // First try: look for the direct link in slot="text-body" or slot="full-post-link"
+      const postLink = postContainer.querySelector('a[slot="text-body"], a[slot="full-post-link"]');
+      if (postLink && postLink.getAttribute('href')) {
+        return postLink.getAttribute('href');
       }
 
-      // 2. Check parent elements for post URL
-      let currentElement: HTMLElement | null = element;
-      for (let i = 0; i < 5 && currentElement; i++) {
-        const elementPostUrl = currentElement.getAttribute("data-post-url") || 
-                               currentElement.getAttribute("data-url") || 
-                               currentElement.getAttribute("href");
-        
-        if (elementPostUrl) {
-          return this.normalizeUrl(elementPostUrl);
-        }
-        
-        currentElement = currentElement.parentElement;
-      }
-
-      // 3. Look for nearby anchors that might contain the post URL
-      const nearestLink = element.closest("a");
-      if (nearestLink) {
-        const href = nearestLink.getAttribute("href");
-        return this.normalizeUrl(href);
-      }
-
-      // 4. For shreddit (new Reddit), look for post permalink in data attributes
-      const postElement = element.closest("[data-permalink]");
-      if (postElement) {
-        const permalink = postElement.getAttribute("data-permalink");
-        return this.normalizeUrl(permalink);
-      }
-
-      // 5. For shreddit, try to find post URL in the DOM structure
-      const shredditPost = element.closest("shreddit-post") || 
-                           element.closest("[slot='post']");
-      
-      if (shredditPost) {
-        const postLink = shredditPost.querySelector("a[slot='title-link']") || 
-                         shredditPost.querySelector("a[data-testid='post-title']");
-        
-        if (postLink) {
-          const href = postLink.getAttribute("href");
-          return this.normalizeUrl(href);
-        }
+      // Second try: look for any comment link
+      const commentLink = postContainer.querySelector('a[href*="/comments/"]');
+      if (commentLink && commentLink.getAttribute('href')) {
+        return commentLink.getAttribute('href');
       }
 
       return null;
     },
 
-    /**
-     * Normalizes a URL to ensure it's a valid Reddit post URL
-     */
-    normalizeUrl(url: string | null): string | null {
-      if (!url) return null;
-
-      // Handle relative URLs
-      if (url.startsWith("/")) {
-        url = window.location.origin + url;
-      }
-
-      // Ensure URL is for a Reddit post
-      if (!url.includes("reddit.com")) {
-        return null;
-      }
-
-      // Remove query parameters for cleaner URLs
-      url = url.split("?")[0];
-
-      // Ensure URL ends with .json for API requests
-      if (!url.endsWith(".json")) {
-        // Remove trailing slash if present
-        if (url.endsWith("/")) {
-          url = url.slice(0, -1);
-        }
-        url += ".json";
-      }
-
-      return url;
-    },
-
-    /**
-     * Initializes the post content viewer
-     */
     init() {
-      if (this._initialized) return;
-      this._initialized = true;
-
-      // Connect to share buttons
-      const addShareButtonHandlers = () => {
-        // Find all elements that match our share button selectors
-        const shareButtonSelectors = [
-          "shreddit-post-share-button[data-post-click-location='share']",
-          "[slot='share-button']",
-          ".share",
-          "[data-event-action='share']",
-          "[data-click-id='share']",
-          "button[data-test-id='post-share-button']",
-          "a[data-attribute='share']",
-        ];
-
-        const shareButtons = document.querySelectorAll(shareButtonSelectors.join(", "));
-        shareButtons.forEach((button) => handleShareButton(button));
-
-        // For new Reddit, find slot elements and check their content
-        document.querySelectorAll("[slot='share-button']").forEach((slot) => {
-          const shareButton = slot.querySelector(
-            "*[data-post-click-location='share']"
-          );
-          if (shareButton) {
-            handleShareButton(shareButton);
-          }
-        });
-
-        // For old Reddit, add handlers to share links
-        document.querySelectorAll(".share").forEach((element) => {
-          handleShareButton(element);
-        });
-      };
-
-      // Wait for DOM to fully load
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", addShareButtonHandlers);
-      } else {
-        addShareButtonHandlers();
-      }
-
-      // Set up a MutationObserver to handle dynamically added share buttons
-      const observer = new MutationObserver((mutations) => {
-        // Buffer multiple mutations to avoid too many DOM operations
-        // Use debounce approach: only run once every 200ms
-        if (this._observerDebounceTimeout) {
-          clearTimeout(this._observerDebounceTimeout);
-        }
+      console.log('Initializing rPostContent');
+      // Handle mouse events for post titles and content
+      document.addEventListener("mouseover", async (e) => {
+        const target = e.target as HTMLElement;
         
-        this._observerDebounceTimeout = setTimeout(() => {
-          addShareButtonHandlers();
-        }, 200);
+        // Check if we're hovering over a post title or content area
+        const isPostContent = target.matches('a[slot="text-body"], a[slot="full-post-link"]') || 
+                            target.closest('a[slot="text-body"], a[slot="full-post-link"]') ||
+                            target.matches('shreddit-post [slot="text-body"], shreddit-post [slot="full-post-link"]') ||
+                            target.closest('shreddit-post [slot="text-body"], shreddit-post [slot="full-post-link"]');
+        
+        console.log('Mouseover event:', {
+          target: target.tagName,
+          isPostContent,
+          slot: target.getAttribute('slot'),
+          href: target instanceof HTMLAnchorElement ? target.href : null,
+          parentElement: target.parentElement?.tagName
+        });
+        
+        if (isPostContent) {
+          const postUrl = this.getPostUrl(target);
+          console.log('Found post URL:', postUrl);
+          
+          if (postUrl) {
+            this.loading(target);
+            try {
+              const jsonUrl = postUrl + ".json";
+              console.log('Fetching post content from:', jsonUrl);
+              const content = await getPostContent({
+                url: jsonUrl,
+                data: DEFAULT_REQUEST_PARAMS
+              });
+              this.show(target, content);
+            } catch (error) {
+              this.handleError(target, error.message);
+            }
+          }
+        }
       });
 
-      // Start observing the entire document
-      observer.observe(document.documentElement, {
-        childList: true,
-        subtree: true,
+      document.addEventListener("mouseout", (e) => {
+        const target = e.target as HTMLElement;
+        const isPostContent = target.matches('a[slot="text-body"], a[slot="full-post-link"]') || 
+                            target.closest('a[slot="text-body"], a[slot="full-post-link"]') ||
+                            target.matches('shreddit-post [slot="text-body"], shreddit-post [slot="full-post-link"]') ||
+                            target.closest('shreddit-post [slot="text-body"], shreddit-post [slot="full-post-link"]');
+        
+        if (isPostContent) {
+          console.log('Mouse out from post content area');
+          this.hidePopupSoon();
+        }
       });
-    },
 
-    /**
-     * Returns HTML for the loading indicator
-     */
-    loadingHtml() {
-      return `
-        <div class="${DOM.classed("loading")}">
-          <div class="${DOM.classed("loading-spinner")}">
-            <div class="${DOM.classed("loading-bar-1")}"></div>
-            <div class="${DOM.classed("loading-bar-2")}"></div>
-            <div class="${DOM.classed("loading-bar-3")}"></div>
-            <div class="${DOM.classed("loading-bar-4")}"></div>
-          </div>
-          <div class="${DOM.classed("loading-text")}">
-            Loading post content...
-          </div>
-        </div>
-      `;
+      // Handle mouse events on the popup itself
+      this.getPopup().addEventListener("mouseenter", () => {
+        console.log('Mouse entered popup');
+        if (this.hideTimeout) {
+          window.clearTimeout(this.hideTimeout);
+          this.hideTimeout = null;
+        }
+      });
+
+      this.getPopup().addEventListener("mouseleave", () => {
+        console.log('Mouse left popup');
+        this.hidePopupSoon();
+      });
     },
   };
 
-  // Initialize once DOM is ready
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      rPostContentView.init();
-    });
-  } else {
-    rPostContentView.init();
-  }
-
-  // Create a MutationObserver to handle share buttons
-  const observer = new MutationObserver((mutations) => {
-    // Find all share buttons, including those inside slots
-    const shareButtons = new Set<Element>();
-    
-    // Direct share buttons
-    document.querySelectorAll('shreddit-post-share-button[data-post-click-location="share"]')
-      .forEach(button => shareButtons.add(button));
-    
-    // Share buttons inside slots
-    document.querySelectorAll('[slot="share-button"]').forEach(slot => {
-      const shareButton = slot.querySelector('*[data-post-click-location="share"]');
-      if (shareButton) {
-        shareButtons.add(shareButton);
-      }
-    });
-    
-    // Handle each share button
-    shareButtons.forEach(handleShareButton);
-  });
-  
-  // Start observing
-  observer.observe(document.documentElement, { 
-    childList: true, 
-    subtree: true,
-    attributes: true
-  });
-  
-})(window);
+  // Initialize the post content hover functionality
+  rPostContentView.init();
+})(window); 
