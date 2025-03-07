@@ -9,7 +9,7 @@ export class UserContext {
   _usesNewStyles: boolean;
   
   // Cache for expensive computations
-  private static _bodyColorCache: { color: string, isDark: boolean } | null = null;
+  static _bodyColorCache: { color: string, isDark: boolean } | null = null;
 
   /**
    * Gets the singleton instance of UserContext
@@ -46,7 +46,7 @@ export class UserContext {
       }
     }).catch((error) => {
       // Silently handle errors - we'll just use the defaults
-      console.warn('Failed to fetch user data:', error);
+      // console.warn('Failed to fetch user data:', error);
     });
   }
 
@@ -156,8 +156,8 @@ function extractNightModeFromStyles(): boolean {
  */
 function isDark(color): boolean {
   // Variables for red, green, blue values
-  let r, g, b, hsp;
-
+  let r, g, b;
+  
   // Check the format of the color, HEX or RGB?
   if (color.match(/^rgb/)) {
     // If RGB --> extract the individual RGB values
@@ -182,7 +182,7 @@ function isDark(color): boolean {
 
   // Calculate the brightness using the HSP color model
   // HSP equation from http://alienryderflex.com/hsp.html
-  hsp = Math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b));
+  const hsp = Math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b));
 
   // Return true if the color is dark
   return hsp <= 127.5;
