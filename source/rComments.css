@@ -1,13 +1,17 @@
 /* Base Popup Styles */
 ._rcomment_div {
-  position: absolute;
-  background-color: rgba(255, 255, 255, 0.9);
+  position: fixed;
+  background-color: rgba(255, 255, 255, 0.98);
   min-width: 400px;
   max-width: 600px;
-  width: 100%;
-  border-radius: 1rem;
+  width: auto;
+  max-height: 80vh;
+  overflow-y: auto;
+  border-radius: 8px;
   padding: 0;
   z-index: 10200000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 /* Comment Styles */
@@ -26,7 +30,8 @@
 
 ._rcomments_content {
   background-color: white;
-  padding: 5px 0px;
+  padding: 0px;
+  margin-bottom: 0.5rem;
 }
 
 /* Navigation and Actions */
@@ -413,6 +418,7 @@
   line-height: 1.5;
   color: #1a1a1b;
   overflow-wrap: break-word;
+  text-align: justify;
   padding: 0.5rem 0;
 }
 
@@ -478,4 +484,32 @@
 
 ._rpost_content_new_reddit_styles ._rpost_content_error {
   color: #ea0027;
+}
+
+/* Close button styles for both popups */
+._rcomments_close-button,
+._rpost_content_close-button {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #666;
+  z-index: 10200001;
+}
+
+._rcomments_close-button:hover,
+._rpost_content_close-button:hover {
+  color: #333;
+}
+
+/* Title styles for comments popup */
+._rcomments_title {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin: 10px 0 5px 10px;
+  padding-right: 30px;
+  color: #1a1a1b;
 }

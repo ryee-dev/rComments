@@ -1,27 +1,27 @@
 import { getCommentData } from "./data-fetchers/commentFetcher";
 import {
-  extractCommentData,
-  extractListingJson,
+    extractCommentData,
+    extractListingJson,
 } from "./data-fetchers/commentInspector";
 import * as DOM from "./dom/DOM";
 import { getListingUrlPathElement } from "./dom/dom-accessors";
 import {
-  applyVote,
-  generateCommentHtml,
+    applyVote,
+    generateCommentHtml,
 } from "./html-generators/html_generator";
 import {
-  handleAAExtractorClick,
-  isAALinksTogglerElement,
+    handleAAExtractorClick,
+    isAALinksTogglerElement,
 } from "./post-processing-plugins/aa-video-extractor/aa_video_extractor";
 import plugins from "./post-processing-plugins/plugins";
 import { _request, RequestOptions } from "./Request";
 import Store from "./Store";
 import {
-  CommentResponseData,
-  ExtractedCommentData,
-  RequestData,
-  RequestParams,
-  SuccessfulCommentResponseData,
+    CommentResponseData,
+    ExtractedCommentData,
+    RequestData,
+    RequestParams,
+    SuccessfulCommentResponseData,
 } from "./types/types";
 import { UserContext } from "./UserContext";
 
@@ -84,16 +84,50 @@ UserContext.init();
         const popup = window.document.createElement("div");
         const nextCommentDiv = window.document.createElement("div");
         const contentDiv = window.document.createElement("div");
+        const titleDiv = window.document.createElement("div");
+        const closeButton = window.document.createElement("button");
+        
+        // Set up title
+        titleDiv.className = DOM.classed("title");
+        titleDiv.textContent = "Comments Preview";
+        titleDiv.id = "rcomments-title";
+        
+        // Set up close button
+        closeButton.className = DOM.classed("close-button");
+        closeButton.textContent = "×";
+        closeButton.setAttribute("aria-label", "Close comments preview");
+        closeButton.style.position = "absolute";
+        closeButton.style.right = "10px";
+        closeButton.style.top = "10px";
+        closeButton.style.background = "none";
+        closeButton.style.border = "none";
+        closeButton.style.fontSize = "20px";
+        closeButton.style.cursor = "pointer";
+        closeButton.style.color = "#666";
+        closeButton.addEventListener("click", () => this.hidePopup());
+        
+        // Set up next comment div
         nextCommentDiv.className = DOM.classed("next_comment");
         nextCommentDiv.innerHTML = NEXT_COMMENT_TEXT;
+        
+        // Set up content div
         contentDiv.className = DOM.classed("content");
+        
+        // Add classes to popup
         popup.classList.add(R_COMMENTS_MAIN_CLASS);
 
         if (UserContext.get().usesNewStyles()) {
           popup.classList.add(R_COMMENTS_NEW_REDDIT_STYLE);
         }
+        
+        // Add proper ARIA attributes for accessibility
+        popup.setAttribute("role", "dialog");
+        popup.setAttribute("aria-labelledby", "rcomments-title");
+        popup.setAttribute("tabindex", "-1");
 
         popup.style.display = "none";
+        popup.appendChild(titleDiv);
+        popup.appendChild(closeButton);
         popup.appendChild(nextCommentDiv);
         popup.appendChild(contentDiv);
         window.document.body.appendChild(popup);
@@ -119,6 +153,13 @@ UserContext.init();
             this.hidePopupSoon();
           }
         });
+        
+        // Add keyboard event listener for Escape key
+        popup.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") {
+            this.hidePopup();
+          }
+        });
 
         this._popup = popup;
       }
@@ -127,33 +168,100 @@ UserContext.init();
     },
 
     popup(el) {
-      const popup = this.getPopup();
-      const nextCommentNone = popup.getElementsByClassName(
-        DOM.classed("next_comment_none")
-      )[0];
-
-      if (nextCommentNone) {
-        nextCommentNone.innerHTML = NEXT_COMMENT_TEXT;
-        nextCommentNone.classList = [DOM.classed("next_comment")];
-      }
-
-      const clientRect = el.getBoundingClientRect();
-
-      if (this.isFirstComment(el)) {
-        const windowOffsetY = window.pageYOffset;
-        const windowOffsetX = window.pageXOffset;
-        const top =
-          Math.round(clientRect.top + clientRect.height + windowOffsetY) - 80;
-        const left = Math.round(clientRect.left + windowOffsetX);
-        const nextComment = popup.getElementsByClassName(
-          DOM.classed("next_comment")
-        )[0];
-        if (nextComment) {
-          nextComment.innerHTML = NEXT_COMMENT_TEXT;
+      // Check if the event is coming from a share button or related element
+      const isShareRelated = (element) => {
+        if (!element) return false;
+        
+        // Check direct attributes
+        if (element.getAttribute && element.getAttribute('data-post-click-location') === 'share') {
+          return true;
         }
-        popup.style.top = `${top}px`;
-        popup.style.left = `${left}px`;
+        
+        // Check classes
+        if (element.classList && 
+            (element.classList.contains('share') || 
+             element.classList.contains('share-button'))) {
+          return true;  
+        }
+        
+        // Check parent too
+        if (element.parentElement && isShareRelated(element.parentElement)) {
+          return true;
+        }
+        
+        // Check for closest share button
+        if (element.closest && 
+            (element.closest('[data-post-click-location="share"]') ||
+             element.closest('[slot="share-button"]'))) {
+          return true;
+        }
+        
+        return false;
+      };
+      
+      // Skip if share related
+      if (isShareRelated(el)) {
+        return document.createElement('div'); // Return an empty div to prevent errors
       }
+      
+      const popup = this.getPopup();
+      let thing = null;
+      
+      try {
+        thing = typeof this.findClosestThing === 'function' ? this.findClosestThing(el) : null;
+      } catch (e) {
+        // Silently handle the error
+      }
+      
+      let parentClass;
+
+      if (thing) {
+        // If the closest thing is the first comment, it must be a root comment.
+        parentClass = thing.classList.contains("sitetable") ? "" : "comment";
+      } else {
+        // If we can't find a parent thing, use comment as parent class by default.
+        parentClass = "comment";
+      }
+
+      // Set .comment class for styling, if on a comment page.
+      popup.className = `_rcomment_div ${parentClass}`;
+
+      if (UserContext.get().usesNewStyles()) {
+        popup.classList.add("_rcomments_new_reddit_styles");
+      }
+      
+      // Position the popup next to the comments button
+      const rect = el.getBoundingClientRect();
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // Get popup dimensions
+      const popupWidth = 600; // Approximate width
+      const popupHeight = Math.min(windowHeight * 0.8, 800); // Approximate height
+      
+      // Position to the right of the comments button by default
+      let left = rect.right + 10;
+      let top = rect.top;
+      
+      // If positioning to the right would push it off-screen, position to the left
+      if (left + popupWidth > windowWidth - 20) {
+        left = Math.max(20, rect.left - popupWidth - 10);
+      }
+      
+      // Make sure the popup doesn't go off the top or bottom of the screen
+      if (top + popupHeight > windowHeight - 20) {
+        top = Math.max(20, windowHeight - popupHeight - 20);
+      }
+      
+      // Apply the position
+      popup.style.position = "fixed";
+      popup.style.left = `${left}px`;
+      popup.style.top = `${top}px`;
+      popup.style.display = "block";
+      
+      // Focus the popup for accessibility
+      popup.focus();
+      
       return popup;
     },
 
@@ -161,6 +269,8 @@ UserContext.init();
       if (this._popup && !this.isCursorInsidePopup) {
         this._popup.style.display = "none";
         this.isPopupVisible = false;
+        this.currentAnchor = null;  // Reset currentAnchor when hiding popup
+        this.active = false;  // Reset active state
         
         if (this.hideTimeout) {
           window.clearTimeout(this.hideTimeout);
@@ -177,6 +287,8 @@ UserContext.init();
       this.hideTimeout = window.setTimeout(() => {
         if (!this.isCursorInsidePopup) {
           this.hidePopup();
+          this.currentAnchor = null;  // Reset currentAnchor
+          this.active = false;  // Reset active state
         }
       }, 300);
     },
@@ -328,10 +440,16 @@ UserContext.init();
       ): HTMLAnchorElement | null {
         if (!element) return null;
 
-        if (
-          element.tagName === "A" &&
-          element.getAttribute("data-post-click-location") === "comments-button"
-        ) {
+        // Check if it's the comments button/link
+        const isCommentsButton = 
+          // New Reddit comment button
+          (element.getAttribute("data-click-id") === "comments") ||
+          // Old Reddit and other variations
+          (element.tagName === "A" && 
+           (element.getAttribute("data-post-click-location") === "comments-button" ||
+            element.classList.contains("comments-link")));
+
+        if (isCommentsButton) {
           return element as HTMLAnchorElement;
         }
 
@@ -359,6 +477,38 @@ UserContext.init();
         return null;
       }
 
+      // Create a global helper to check for share buttons
+      const isShareButton = (element) => {
+        if (!element) return false;
+        
+        // Most direct check - data attribute
+        if (element.getAttribute && element.getAttribute('data-post-click-location') === 'share') {
+          return true;
+        }
+        
+        // Check closest parent with these attributes
+        if (element.closest && 
+           (element.closest('[data-post-click-location="share"]') || 
+            element.closest('[slot="share-button"]'))) {
+          return true;
+        }
+        
+        // Check by class name
+        if (element.classList && 
+           (element.classList.contains('share') || 
+            element.classList.contains('share-button'))) {
+          return true;
+        }
+        
+        // Check text content
+        if (element.textContent && 
+            element.textContent.trim().toLowerCase() === 'share') {
+          return true;
+        }
+        
+        return false;
+      };
+
       // Cache DOM queries
       const bodyElement = window.document.body;
       const controller = this;
@@ -369,6 +519,15 @@ UserContext.init();
 
       // Use event delegation for better performance
       bodyElement.addEventListener("mousemove", (e: MouseEvent) => {
+        // Exit immediately for share buttons
+        const target = e.target as HTMLElement;
+        
+        // Exit for any share button-related element
+        if (isShareButton(target)) {
+          return;
+        }
+        
+        // Continue with normal mousemove handling
         if (mousemoveTimeout) {
           window.clearTimeout(mousemoveTimeout);
         }
@@ -376,43 +535,42 @@ UserContext.init();
         mousemoveTimeout = window.setTimeout(() => {
           mousemoveTimeout = null;
           
-          const target = e.target as HTMLElement;
           let commentsAnchor: HTMLAnchorElement | null = null;
 
-          // Fast path - check if we're already on an active anchor
-          if (active && target === active) {
-            yPos = e.pageY;
-            return;
+          // Check if the target or its parent is a valid comments anchor
+          commentsAnchor =
+            isValidCommentAnchor(target) ||
+            isValidCommentAnchor(target.parentElement);
+
+          if (!commentsAnchor && target.shadowRoot) {
+            commentsAnchor = findCommentAnchorInShadow(target.shadowRoot);
           }
 
-          // Only do expensive DOM traversal if needed
-          if (!active || target.closest('a[data-post-click-location="comments-button"]')) {
-            commentsAnchor =
-              isValidCommentAnchor(target) ||
-              isValidCommentAnchor(target.parentElement);
-
-            if (!commentsAnchor && target.shadowRoot) {
-              commentsAnchor = findCommentAnchorInShadow(target.shadowRoot);
+          // If we're not on a comments anchor and not moving to/from the popup, reset state
+          if (!commentsAnchor && !target.closest(`.${R_COMMENTS_MAIN_CLASS}`)) {
+            if (active) {
+              controller.handleAnchorMouseLeave(e, yPos);
+              active = false;
             }
-          }
-
-          if (!active && !commentsAnchor) {
             return;
           }
 
+          // Update position if we're still on the same anchor
           if (active && commentsAnchor && commentsAnchor.href === active.href) {
             yPos = e.pageY;
             return;
           }
 
-          if (!active && commentsAnchor) {
+          // Handle new anchor hover
+          if (commentsAnchor && (!active || commentsAnchor.href !== active.href)) {
+            if (active) {
+              // Clean up previous anchor
+              controller.handleAnchorMouseLeave(e, yPos);
+            }
             controller.registerPopup();
             active = commentsAnchor;
             yPos = e.pageY;
             controller.handleAnchorMouseEnter(commentsAnchor);
-          } else if (active) {
-            controller.handleAnchorMouseLeave(e, yPos);
-            active = false;
           }
         }, MOUSEMOVE_DEBOUNCE);
       });
@@ -451,16 +609,18 @@ UserContext.init();
     },
 
     findClosestThing(node) {
+      if (!node) return null;
+      
       while (node) {
         if (node.classList && node.classList.contains("thing")) {
           return node;
         }
         node = node.parentNode;
-        if (node.tagName.toLowerCase() === "body") {
+        if (!node || (node.tagName && node.tagName.toLowerCase() === "body")) {
           break;
         }
       }
-      return false;
+      return null;
     },
 
     async renderCommentFromElement(el, init = false): Promise<void> {
@@ -470,7 +630,7 @@ UserContext.init();
 
       // If not first comment, find first parent "thing" div
       // which represents is a comment div with id attribute
-      const commentId = init ? null : this.findClosestThing(el).id || null; // TODO: simplify, needs to be real commentID or null
+      const commentId = init ? null : (this.findClosestThing(el)?.id || null); // TODO: simplify, needs to be real commentID or null
       const isNextComment = el.classList.contains(R_COMMENTS_MAIN_CLASS);
       // Target URL for request is comment page or comment's permalink
       // Initial request will not have a comment ID, so will use overall comment page
@@ -635,32 +795,50 @@ UserContext.init();
     },
 
     handleAnchorMouseEnter(commentAnchor) {
-      const commentAnchorWords = commentAnchor.text.split(" ");
-      if (commentAnchorWords.length === 0) {
-        return;
-      }
-      const numberOfComments = Number.parseInt(commentAnchorWords[0], 10);
-      const firstWordIsNumber = !Number.isNaN(numberOfComments);
-      if (firstWordIsNumber && numberOfComments === 0) {
-        return;
-      }
-      if (!firstWordIsNumber && commentAnchorWords.length === 1) {
-        return;
-      }
-
-      // Clear any existing timeout
-      if (this.timeoutId) {
-        clearTimeout(this.timeoutId);
-      }
-
-      // Set active anchor for tracking
-      this.activeAnchor = commentAnchor;
-      
-      this.timeoutId = setTimeout(() => {
-        if (this.activeAnchor === commentAnchor) {
-          this.renderCommentFromElement(commentAnchor, true);
+      // Check if the event is coming from a share button or related element
+      const isShareRelated = (element) => {
+        if (!element) return false;
+        
+        // Check direct attributes
+        if (element.getAttribute && element.getAttribute('data-post-click-location') === 'share') {
+          return true;
         }
-      }, 400);
+        
+        // Check classes
+        if (element.classList && 
+            (element.classList.contains('share') || 
+             element.classList.contains('share-button'))) {
+          return true;  
+        }
+        
+        // Check parent too
+        if (element.parentElement && isShareRelated(element.parentElement)) {
+          return true;
+        }
+        
+        // Check for closest share button
+        if (element.closest && 
+            (element.closest('[data-post-click-location="share"]') ||
+             element.closest('[slot="share-button"]'))) {
+          return true;
+        }
+        
+        return false;
+      };
+      
+      // Skip if share related
+      if (isShareRelated(commentAnchor)) {
+        return;
+      }
+
+      if (!commentAnchor.getAttribute("data-populated")) {
+        commentAnchor.setAttribute("data-populated", "false");
+      }
+
+      if (!this.currentAnchor) {
+        this.currentAnchor = commentAnchor;
+        this.renderCommentFromElement(commentAnchor, true);
+      }
     },
 
     handleAnchorMouseLeave(e, prevPageY) {
@@ -677,7 +855,7 @@ UserContext.init();
       if (prevPageY >= e.pageY) {
         // Moving up or sideways - hide immediately
         this.view.hidePopup();
-        this.activeAnchor = null;
+        this.currentAnchor = null;  // Reset currentAnchor when hiding popup
       } else {
         // Moving down - give chance to move to popup
         this.view.hidePopupSoon();
