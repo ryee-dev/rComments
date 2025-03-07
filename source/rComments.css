@@ -25,8 +25,8 @@
 }
 
 ._rcomments_content {
-  padding: 5px 0;
-  background-color: #0e1113;
+  background-color: white;
+  padding: 5px 0px;
 }
 
 /* Navigation and Actions */
@@ -370,4 +370,112 @@
   text-align: center;
   padding-bottom: 4px;
   font-size: 12px;
+}
+
+/* Post Content Popup Styles */
+._rpost_content_div {
+  position: fixed;
+  background-color: rgba(255, 255, 255, 0.98);
+  min-width: 400px;
+  max-width: 800px;
+  width: auto;
+  max-height: 80vh;
+  overflow-y: auto;
+  border-radius: 8px;
+  padding: 1rem;
+  z-index: 10200000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+._rpost_content_header {
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+._rpost_content_title {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  color: #1a1a1b;
+}
+
+._rpost_content_meta {
+  font-size: 0.8rem;
+  color: #7c7c7c;
+}
+
+._rpost_content_body {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #1a1a1b;
+  overflow-wrap: break-word;
+  padding: 0.5rem 0;
+}
+
+._rpost_content_body a {
+  color: #0079d3;
+  text-decoration: none;
+}
+
+._rpost_content_body a:hover {
+  text-decoration: underline;
+}
+
+._rpost_content_loading {
+  text-align: center;
+  padding: 1rem;
+  font-style: italic;
+  color: #666;
+}
+
+._rpost_content_error {
+  text-align: center;
+  padding: 1rem;
+  color: #ff0000;
+  font-weight: bold;
+}
+
+/* Night Mode Styles */
+.res-nightmode ._rpost_content_div {
+  background-color: #1a1a1a;
+  border: 1px solid #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.res-nightmode ._rpost_content_title {
+  color: #d7dadc;
+}
+
+.res-nightmode ._rpost_content_body {
+  color: #d7dadc;
+}
+
+.res-nightmode ._rpost_content_meta {
+  color: #818384;
+}
+
+.res-nightmode ._rpost_content_header {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.res-nightmode ._rpost_content_body a {
+  color: #4fbcff;
+}
+
+/* New Reddit Styles */
+._rpost_content_new_reddit_styles {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+._rpost_content_new_reddit_styles ._rpost_content_loading {
+  color: #878a8c;
+}
+
+._rpost_content_new_reddit_styles ._rpost_content_error {
+  color: #ea0027;
 }

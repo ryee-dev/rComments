@@ -2,7 +2,10 @@ const path = require("path");
 
 module.exports = {
   mode: "development",
-  entry: "./rComments.ts",
+  entry: {
+    rComments: "./rComments.ts",
+    rPostContent: "./rPostContent.ts",
+  },
   devtool: false,
   module: {
     rules: [
@@ -28,6 +31,6 @@ module.exports = {
   },
   output: {
     path: path.resolve(__dirname, "dist"),
-    filename: "rComments.js",
+    filename: "[name].js",
   },
 };

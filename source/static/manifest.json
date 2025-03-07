@@ -1,7 +1,7 @@
 {
   "content_scripts": [
     {
-      "js": ["rComments.js"],
+      "js": ["rComments.js", "rPostContent.js"],
       "css": ["rComments.css"],
       "matches": [
         "http://reddit.com/*",
