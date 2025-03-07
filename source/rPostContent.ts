@@ -474,62 +474,123 @@ UserContext.init();
   // Initialize the post content hover functionality
   rPostContentView.init();
 
-  // Immediate execution script to disable share buttons as early as possible
+  // Immediate execution script to handle share buttons
   (function() {
-    // Create and inject a style element immediately
-    const disableShareStyle = document.createElement('style');
-    disableShareStyle.textContent = `
-      /* Disable all events on share buttons */
-      [data-post-click-location="share"],
-      [slot="share-button"],
-      button.share-button,
-      .share,
-      .share-button,
-      [data-click-id="share"] {
-        pointer-events: none !important;
+    // Create and inject a style element for share buttons
+    const shareButtonStyle = document.createElement('style');
+    shareButtonStyle.textContent = `
+      /* Style share buttons to indicate hover functionality */
+      shreddit-post-share-button[data-post-click-location="share"],
+      [slot="share-button"] > *[data-post-click-location="share"] {
+        cursor: pointer !important;
+        position: relative;
+      }
+      
+      shreddit-post-share-button[data-post-click-location="share"]:hover,
+      [slot="share-button"] > *[data-post-click-location="share"]:hover {
+        background-color: rgba(0, 121, 211, 0.1);
       }
     `;
-    document.head.appendChild(disableShareStyle);
+    document.head.appendChild(shareButtonStyle);
     
-    // Create a MutationObserver to forcibly disable share buttons
-    const observer = new MutationObserver((mutations) => {
-      const shareButtons = document.querySelectorAll(
-        '[data-post-click-location="share"], [slot="share-button"], .share, button.share-button, .share-button, [data-click-id="share"]'
-      );
+    // Function to handle a share button
+    const handleShareButton = (button: Element) => {
+      // Skip if already handled
+      if (button.hasAttribute('data-rpostcontent-handled')) {
+        return;
+      }
       
-      shareButtons.forEach(button => {
-        // Apply style directly to the element
-        (button as HTMLElement).style.pointerEvents = 'none';
+      // Mark as handled
+      button.setAttribute('data-rpostcontent-handled', 'true');
+      
+      // Create an overlay div that will capture events
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        z-index: 999999;
+      `;
+      
+      // Make sure parent is positioned
+      const buttonParent = button.parentElement;
+      if (buttonParent && window.getComputedStyle(buttonParent).position === 'static') {
+        buttonParent.style.position = 'relative';
+      }
+      
+      // Add hover handlers to the overlay
+      overlay.addEventListener('mouseover', (e) => {
+        e.stopPropagation();
+        e.preventDefault(); // Prevent event from bubbling to comments handler
         
-        // Add a transparent div on top that catches all events
-        if (!button.hasAttribute('data-rcomments-blocked')) {
-          button.setAttribute('data-rcomments-blocked', 'true');
-          
-          // Create a blocking div
-          const blocker = document.createElement('div');
-          blocker.style.cssText = `
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: transparent;
-            z-index: 999999;
-          `;
-          
-          // Make sure parent is positioned
-          if (button.parentElement && 
-              window.getComputedStyle(button.parentElement).position === 'static') {
-            button.parentElement.style.position = 'relative';
-          }
-          
-          // Add the blocker
-          button.parentElement && button.parentElement.appendChild(blocker);
+        const postUrl = rPostContentView.getPostUrl(button as HTMLElement);
+        if (!postUrl) return;
+        
+        rPostContentView.popup(button as HTMLElement);
+        getPostContent({
+          url: postUrl,
+          data: DEFAULT_REQUEST_PARAMS
+        })
+          .then((postData) => {
+            rPostContentView.show(button as HTMLElement, postData);
+          })
+          .catch((error) => {
+            rPostContentView.handleError(button as HTMLElement, 'Error loading post content.');
+          });
+      });
+      
+      overlay.addEventListener('mouseout', (e: MouseEvent) => {
+        e.stopPropagation(); // Prevent event from bubbling to comments handler
+        const relatedTarget = e.relatedTarget as HTMLElement;
+        if (rPostContentView._popup && (!relatedTarget || !rPostContentView._popup.contains(relatedTarget))) {
+          rPostContentView.hidePopupSoon();
         }
       });
+      
+      // Prevent default share behavior and stop event propagation
+      overlay.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+      }, true);
+      
+      // Add the overlay
+      buttonParent?.appendChild(overlay);
+    };
+    
+    // Create a MutationObserver to handle share buttons
+    const observer = new MutationObserver((mutations) => {
+      // Find all share buttons, including those inside slots
+      const shareButtons = new Set<Element>();
+      
+      // Direct share buttons
+      document.querySelectorAll('shreddit-post-share-button[data-post-click-location="share"]')
+        .forEach(button => shareButtons.add(button));
+      
+      // Share buttons inside slots
+      document.querySelectorAll('[slot="share-button"]').forEach(slot => {
+        const shareButton = slot.querySelector('*[data-post-click-location="share"]');
+        if (shareButton) {
+          shareButtons.add(shareButton);
+        }
+      });
+      
+      // Handle each share button
+      shareButtons.forEach(handleShareButton);
     });
     
     // Start observing
+    observer.observe(document.documentElement, { 
+      childList: true, 
+      subtree: true,
+      attributes: true
+    });
+    
+    // Run immediately for any existing share buttons
+    observer.takeRecords();
+    observer.disconnect();
     observer.observe(document.documentElement, { 
       childList: true, 
       subtree: true,

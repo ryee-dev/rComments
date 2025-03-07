@@ -440,6 +440,13 @@ UserContext.init();
       ): HTMLAnchorElement | null {
         if (!element) return null;
 
+        // Skip share buttons completely
+        if (element.getAttribute("data-post-click-location") === "share" ||
+            element.closest('[data-post-click-location="share"]') ||
+            element.closest('[slot="share-button"]')) {
+          return null;
+        }
+
         // Check if it's the comments button/link
         const isCommentsButton = 
           // New Reddit comment button
